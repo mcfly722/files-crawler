@@ -45,11 +45,6 @@ CREATE TABLE `files` (
 DELIMITER $$
 $$
 
-CREATE DEFINER=`root`@`localhost` PROCEDURE `reportFolder`(folderPath  varchar(260), exist BOOL)
-BEGIN
-	INSERT INTO folders (fullPath, exist) VALUES (folderPath, exist) ON DUPLICATE KEY UPDATE fullPath=folderPath, exist=exist;
-END;
-
 CREATE PROCEDURE `reportFile` (folderID bigint, fileName varchar(256))
 BEGIN
 	INSERT INTO files (parentFolderId, name) VALUES (folderId, fileName) ON DUPLICATE KEY UPDATE parentFolderId=folderId, name=fileName;
@@ -69,6 +64,19 @@ BEGIN
 	UPDATE folders SET lastReviewAt = @current_date WHERE exist=1 ORDER BY lastReviewAt LIMIT amount;
 	SELECT Id, fullPath FROM folders WHERE lastReviewAt = @current_date;
 END;
+
+CREATE PROCEDURE `reportFolders` (foldersJSON TEXT)
+BEGIN
+	INSERT INTO folders (fullPath, exist)
+    SELECT fullPath, exist
+    FROM JSON_TABLE(
+		foldersJSON, '$[*]' COLUMNS(
+			fullPath VARCHAR(260) PATH '$.fullPath',
+            exist TINYINT PATH '$.exist'
+        ) 
+    ) AS json
+    ON DUPLICATE KEY UPDATE folders.fullPath=json.folderPath, folders.exist=json.exist;
+END
 
 $$
 DELIMITER ;

@@ -1,38 +1,57 @@
 param(
     $connectionString,
-    $batchSize=100,
-    $initialRoot='c:\'
+    $inputBatchSize = 100,
+    $outputBatchSize = 200,
+    $minimalSendIntervalSec = 60,
+    $initialRoot = 'c:\'
 )
 
 if ($connectionString -like '')  {
     $connectionString = Get-Content -path 'dbConnectionString'
 }
 
+$global:foldersBatch=[System.Collections.ArrayList]::new()
+$global:foldersBatchLastSend = get-date
+function appendFolder([hashtable]$folder, $minimalSendIntervalSec, $outputBatchSize) {
+    $global:foldersBatch.Add($folder) > $null
+
+    if (
+        (((get-date)-$global:foldersBatchLastSend).TotalSeconds -gt $minimalSendIntervalSec) -or 
+        ($global:foldersBatch.Count -ge $outputBatchSize)
+        ) {
+            $json = convertTo-Json -inputObject $global:foldersBatch -Compress
+            Write-Host "reportFolders" -ForegroundColor Green
+            Invoke-SQLQuery -ConnectionName "sql" -query "CALL reportFolders(@foldersJSON);" -parameters @{'foldersJSON'= $json} 
+            $global:foldersBatch=[System.Collections.ArrayList]::new()
+    }
+}
+
 $WarningPreference = "SilentlyContinue"
 
 Open-MySqlConnection -ConnectionName "sql" -ConnectionString $connectionString
 
-Invoke-SQLQuery -ConnectionName "sql" -query "CALL reportFolder(@folderPath, @exist);" -parameters @{'folderPath'=$initialRoot;'exist'=1}
+appendFolder @{'fullPath'=$initialRoot;'exist'=1} 0 0
+
 
 do {
     try {
         Write-Host "getNextFoldersForReview" -ForegroundColor Green
-        $foldersToCheck = Invoke-SQLQuery -ConnectionName "sql" -query "CALL getNextFoldersForReview(@batchSize);" -parameters @{'batchSize'=$batchSize}
+        $foldersToCheck = Invoke-SQLQuery -ConnectionName "sql" -query "CALL getNextFoldersForReview(@batchSize);" -parameters @{'batchSize' = $inputBatchSize}
 
         foreach($folder in $foldersToCheck){
-            write-host $folder.fullPath
+#            write-host $folder.fullPath
             if (test-path $folder.fullPath) {
                 try {
                     Get-ChildItem -Directory $folder.fullPath -ErrorAction Stop | ForEach-Object {
-                        write-host $_.FullName
-                        Invoke-SQLQuery -ConnectionName "sql" -query "CALL reportFolder(@folderPath, @exist);" -parameters @{'folderPath'=$_.FullName;'exist'=1} 
+                        #write-host $_.FullName
+                        appendFolder @{'fullPath' = $_.FullName; 'exist' = 1} $minimalSendIntervalSec $outputBatchSize
                     }
                 } catch {
-                    Invoke-SQLQuery -ConnectionName "sql" -query "CALL reportFolder(@folderPath, @exist);" -parameters @{'folderPath'=$folder.fullPath;'exist'=2}
+                    appendFolder @{'fullPath' = $folder.fullPath; 'exist' = 2} $minimalSendIntervalSec $outputBatchSize
                 }
             } else {
                 # folder does not exist any more (deleted)
-                Invoke-SQLQuery -ConnectionName "sql" -query "CALL reportFolder(@folderPath, @exist);" -parameters @{'folderPath'=$folder.fullPath;'exist'=0}
+                appendFolder @{'fullPath' = $folder.fullPath; 'exist' = 0} $minimalSendIntervalSec $outputBatchSize
             }
         }
     } catch {
