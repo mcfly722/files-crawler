@@ -20,9 +20,13 @@ do {
     foreach($folder in $foldersToCheck){
         write-host $folder.fullPath
         if (test-path $folder.fullPath) {
-            Get-ChildItem -Directory $folder.fullPath | ForEach-Object {
-                write-host $_.FullName
-                Invoke-SQLQuery -ConnectionName "sql" -query "CALL reportFolder(@folderPath, @exist);" -parameters @{'folderPath'=$_.FullName;'exist'=1} 
+            try {
+                Get-ChildItem -Directory $folder.fullPath -ErrorAction Stop | ForEach-Object {
+                    write-host $_.FullName
+                    Invoke-SQLQuery -ConnectionName "sql" -query "CALL reportFolder(@folderPath, @exist);" -parameters @{'folderPath'=$_.FullName;'exist'=1} 
+                }
+            } catch {
+                Invoke-SQLQuery -ConnectionName "sql" -query "CALL reportFolder(@folderPath, @exist);" -parameters @{'folderPath'=$folder.fullPath;'exist'=2}
             }
         } else {
             # folder does not exist any more (deleted)
