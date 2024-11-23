@@ -26,6 +26,7 @@ function appendFolder([hashtable]$folder, $minimalSendIntervalSec, $outputBatchS
     }
 }
 
+
 $WarningPreference = "SilentlyContinue"
 
 Open-MySqlConnection -ConnectionName "sql" -ConnectionString $connectionString
@@ -39,7 +40,7 @@ do {
         $foldersToCheck = Invoke-SQLQuery -ConnectionName "sql" -query "CALL getNextFoldersForReview(@batchSize);" -parameters @{'batchSize' = $inputBatchSize}
 
         foreach($folder in $foldersToCheck){
-#            write-host $folder.fullPath
+            #write-host $folder.fullPath
             if (test-path $folder.fullPath) {
                 try {
                     Get-ChildItem -Directory $folder.fullPath -ErrorAction Stop | ForEach-Object {

@@ -75,7 +75,7 @@ BEGIN
             exist TINYINT PATH '$.exist'
         ) 
     ) AS json
-    ON DUPLICATE KEY UPDATE folders.fullPath=json.folderPath, folders.exist=json.exist;
+    ON DUPLICATE KEY UPDATE folders.fullPath=json.fullPath, folders.exist=json.exist;
 END
 
 $$
