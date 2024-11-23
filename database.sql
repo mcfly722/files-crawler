@@ -12,10 +12,14 @@ DROP PROCEDURE IF EXISTS `reportHash`;
 CREATE TABLE `folders` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `fullPath` VARCHAR(260) NOT NULL,
-  `lastReviewAt` DATETIME NULL,
+  `exist` TINYINT  DEFAULT 1,
+  `lastReviewAt` TIMESTAMP(6) NULL,
   PRIMARY KEY (`id`),
   UNIQUE INDEX (`fullPath`)
 );
+
+CREATE INDEX lastReviewAtIdx ON `folders` (lastReviewAt);
+CREATE INDEX lastReviewAtAndExistIdx ON `folders` (lastReviewAt, exist);
 
 CREATE TABLE `hashes` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -29,7 +33,7 @@ CREATE TABLE `files` (
   `parentFolderId` BIGINT UNSIGNED NOT NULL,
   `hashId` BIGINT UNSIGNED NULL,
   `name` VARCHAR(256) NOT NULL,
-  `lastSeenAt` DATETIME NULL,
+  `lastSeenAt` TIMESTAMP(6) NULL,
   PRIMARY KEY (`id`,`parentFolderId`,`name`),
   FOREIGN KEY (`parentFolderId`) REFERENCES folders(id) ON DELETE RESTRICT,
   FOREIGN KEY (`hashId`) REFERENCES hashes(id) ON DELETE RESTRICT,
@@ -41,9 +45,9 @@ CREATE TABLE `files` (
 DELIMITER $$
 $$
 
-CREATE PROCEDURE `reportFolder` (folderPath  varchar(260))
+CREATE DEFINER=`root`@`localhost` PROCEDURE `reportFolder`(folderPath  varchar(260), exist BOOL)
 BEGIN
-	INSERT INTO folders (fullPath) VALUES (folderPath) ON DUPLICATE KEY UPDATE fullPath=folderPath;
+	INSERT INTO folders (fullPath, exist) VALUES (folderPath, exist) ON DUPLICATE KEY UPDATE fullPath=folderPath, exist=exist;
 END;
 
 CREATE PROCEDURE `reportFile` (folderID bigint, fileName varchar(256))
@@ -57,6 +61,13 @@ BEGIN
 		INSERT INTO hashes (SHA256) VALUES (SHA256) ON DUPLICATE KEY UPDATE SHA256=SHA256;
 		UPDATE files SET hashId=LAST_INSERT_ID() WHERE files.id=fileId;
 	COMMIT;
+END;
+
+CREATE DEFINER=`root`@`localhost` PROCEDURE `getNextFoldersForReview`(amount INT UNSIGNED)
+BEGIN
+	SET @current_date = NOW(6);
+	UPDATE folders SET lastReviewAt = @current_date WHERE exist=1 ORDER BY lastReviewAt LIMIT amount;
+	SELECT Id, fullPath FROM folders WHERE lastReviewAt = @current_date;
 END;
 
 $$

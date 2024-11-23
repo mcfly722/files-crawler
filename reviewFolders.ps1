@@ -1,55 +1,33 @@
-# install My SQL Connector 9.1
-# https://dev.mysql.com/downloads/connector/net/
-
-# install protobuf (required by MySQL Connector)
-# https://github.com/protocolbuffers/protobuf/releases/download/v29.0-rc3/protoc-29.0-rc-3-win64.zip
-
-
 param(
-    [string]$dbServer="localhost",
-    [string]$dbDatabase="",
-    [string]$dbUser="",
-    [string]$dbUserPwd=""  
+    $connectionString,
+    $batchSize=5,
+    $initialRoot='c:\'
 )
 
-# if you are using newer than 9.1 version, you need change path here
-try {
-    Add-Type -Path 'C:\Program Files (x86)\MySQL\MySQL Connector Net 8.0.21\Assemblies\v4.5.2\MySql.Data.dll' -ReferencedAssemblies 'System.Data.dll'
-} catch {
-    $_.Exception.LoaderExceptions | ForEach-Object { Write-Host $_.Message }
-}
-
-if ($dbUserPwd -like '') {
+if ($connectionString -like '')  {
     $connectionString = Get-Content -path 'dbConnectionString'
-} else {
-	$connectionString = "Server=$dbServer;Database=$dbDatabase;User ID=$dbUser;Password=$dbUserPwd"
 }
 
-$connection = New-Object MySql.Data.MySqlClient.MySqlConnection($connectionString)
+$WarningPreference = "SilentlyContinue"
 
-try {
-    # Open the connection
-    $connection.Open()
-    Write-Host "Connection successful!"
+Open-MySqlConnection -ConnectionName "sql" -ConnectionString $connectionString
 
-    # Create a query and command object
-    $query = "SELECT * FROM new_schema.files;"
-    $command = $connection.CreateCommand()
-    $command.CommandText = $query
+do {
+    Invoke-SQLQuery -ConnectionName "sql" -query "CALL reportFolder(@folderPath, @exist);" -parameters @{'folderPath'=$initialRoot;'exist'=1}
 
-    # Execute the query and get a data reader
-    $reader = $command.ExecuteReader()
+    $foldersToCheck = Invoke-SQLQuery -ConnectionName "sql" -query "CALL getNextFoldersForReview(@batchSize);" -parameters @{'batchSize'=50}
 
-    # Read the data from the query result
-    while ($reader.Read()) {
-        Write-Host "ID: $($reader['id']), Name: $($reader['name'])"
+    foreach($folder in $foldersToCheck){
+        write-host $folder.fullPath
+        if (test-path $folder.fullPath) {
+            Get-ChildItem -Directory $folder.fullPath | ForEach-Object {
+                write-host $_.FullName
+                Invoke-SQLQuery -ConnectionName "sql" -query "CALL reportFolder(@folderPath, @exist);" -parameters @{'folderPath'=$_.FullName;'exist'=1} 
+            }
+        } else {
+            # folder does not exist any more (deleted)
+            Invoke-SQLQuery -ConnectionName "sql" -query "CALL reportFolder(@folderPath, @exist);" -parameters @{'folderPath'=$folder.fullPath;'exist'=0}
+        }
     }
-
-    $reader.Close()
-
-}
-catch {
-    Write-Host "Error: $_"
-}
-
-$connection.Close()
+    Start-Sleep -Seconds 1
+} while ($true)
