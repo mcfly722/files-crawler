@@ -1,5 +1,5 @@
-CREATE SCHEMA `new_schema` ;
-USE `new_schema`;
+CREATE SCHEMA `files` ;
+USE `files`;
 
 DROP TABLE IF EXISTS files;
 DROP TABLE IF EXISTS folders;
@@ -39,7 +39,7 @@ CREATE TABLE `files` (
 
 
 DELIMITER $$
-USE `new_schema`$$
+USE `files`$$
 CREATE PROCEDURE `reportFolder` (folderPath  varchar(260))
 BEGIN
 	INSERT INTO folders (fullPath) VALUES (folderPath) ON DUPLICATE KEY UPDATE fullPath=folderPath;
@@ -47,30 +47,17 @@ END$$
 DELIMITER ;
 
 DELIMITER $$
-USE `new_schema`$$
+USE `files`$$
 CREATE PROCEDURE `reportFile` (folderID bigint, fileName varchar(256))
 BEGIN
 	INSERT INTO files (parentFolderId, name) VALUES (folderId, fileName) ON DUPLICATE KEY UPDATE parentFolderId=folderId, name=fileName;
 END$$
 DELIMITER ;
 
--- Check case when same folder reported  several times that there are no duplicates will be created
-CALL reportFolder('folder1');
-CALL reportFolder('folder1');
-CALL reportFolder('folder1');
-CALL reportFolder('folder2');
-CALL reportFolder('folder2');
-SELECT COUNT(*), fullPath FROM folders GROUP BY fullPath;
-
-CALL reportFile(1, 'file1');
-CALL reportFile(1, 'file1');
-CALL reportFile(1, 'file2');
--- CALL reportFile(2, 'file2');
--- DELETE FROM new_schema.hashes WHERE SHA256='';
 
 DROP PROCEDURE IF EXISTS `reportHash`;
 DELIMITER $$
-USE `new_schema`$$
+USE `files`$$
 CREATE PROCEDURE `reportHash` (fileId BIGINT, SHA256 varchar(64))
 BEGIN
 	START TRANSACTION;
@@ -79,16 +66,3 @@ BEGIN
 	COMMIT;
 END$$
 DELIMITER ;
-
--- Check case when same folder reported  several times that there are no duplicates will be created
-CALL reportHash(1,'hash1');
-CALL reportHash(1,'hash1');
-
-
-ActualizeDirectoryTree.ps1
-ActualizeFileNames.ps1
-ActualizeHashes.ps1
-
-CheckByAntivirus.ps1
-
-
