@@ -12,9 +12,9 @@ $WarningPreference = "SilentlyContinue"
 
 Open-MySqlConnection -ConnectionName "sql" -ConnectionString $connectionString
 
-do {
-    Invoke-SQLQuery -ConnectionName "sql" -query "CALL reportFolder(@folderPath, @exist);" -parameters @{'folderPath'=$initialRoot;'exist'=1}
+Invoke-SQLQuery -ConnectionName "sql" -query "CALL reportFolder(@folderPath, @exist);" -parameters @{'folderPath'=$initialRoot;'exist'=1}
 
+do {
     $foldersToCheck = Invoke-SQLQuery -ConnectionName "sql" -query "CALL getNextFoldersForReview(@batchSize);" -parameters @{'batchSize'=50}
 
     foreach($folder in $foldersToCheck){
