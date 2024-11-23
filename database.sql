@@ -39,30 +39,25 @@ CREATE TABLE `files` (
 
 
 DELIMITER $$
-USE `files`$$
+$$
+
 CREATE PROCEDURE `reportFolder` (folderPath  varchar(260))
 BEGIN
 	INSERT INTO folders (fullPath) VALUES (folderPath) ON DUPLICATE KEY UPDATE fullPath=folderPath;
-END$$
-DELIMITER ;
+END;
 
-DELIMITER $$
-USE `files`$$
 CREATE PROCEDURE `reportFile` (folderID bigint, fileName varchar(256))
 BEGIN
 	INSERT INTO files (parentFolderId, name) VALUES (folderId, fileName) ON DUPLICATE KEY UPDATE parentFolderId=folderId, name=fileName;
-END$$
-DELIMITER ;
+END;
 
-
-DROP PROCEDURE IF EXISTS `reportHash`;
-DELIMITER $$
-USE `files`$$
 CREATE PROCEDURE `reportHash` (fileId BIGINT, SHA256 varchar(64))
 BEGIN
 	START TRANSACTION;
 		INSERT INTO hashes (SHA256) VALUES (SHA256) ON DUPLICATE KEY UPDATE SHA256=SHA256;
 		UPDATE files SET hashId=LAST_INSERT_ID() WHERE files.id=fileId;
 	COMMIT;
-END$$
+END;
+
+$$
 DELIMITER ;
