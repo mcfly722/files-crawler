@@ -29,9 +29,16 @@ DELIMITER $$
 $$
 CREATE DEFINER=`root`@`localhost` PROCEDURE `getNextFoldersForReview`(amount INT UNSIGNED)
 BEGIN
-	SET @current_date = NOW(6);
-	UPDATE folders SET lastReviewAt = @current_date WHERE lastDeletionAt IS NULL ORDER BY lastReviewAt LIMIT amount;
-	SELECT id, fullPath FROM folders WHERE lastReviewAt = @current_date;
+  DECLARE lock_acquired INT DEFAULT 0;
+  SET lock_acquired = GET_LOCK('getNextFoldersForRevie_lock', 60); -- Timeout of 60 seconds
+  IF lock_acquired = 1 THEN
+	  SET @current_date = NOW(6);
+	  UPDATE folders SET lastReviewAt = @current_date WHERE lastDeletionAt IS NULL ORDER BY lastReviewAt LIMIT amount;
+	  SELECT id, fullPath FROM folders WHERE lastReviewAt = @current_date;
+    DO RELEASE_LOCK('getNextFoldersForRevie_lock');
+  ELSE
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Could not acquire the lock';
+  END IF;
 END;
 
 CREATE PROCEDURE `reportFolders` (foldersJSON TEXT)
