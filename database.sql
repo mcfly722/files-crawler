@@ -30,16 +30,26 @@ $$
 CREATE DEFINER=`root`@`localhost` PROCEDURE `getNextFoldersForReview`(amount INT UNSIGNED)
 BEGIN
   DECLARE lock_acquired INT DEFAULT 0;
-  SET lock_acquired = GET_LOCK('getNextFoldersForRevie_lock', 60); -- Timeout of 60 seconds
+  SET lock_acquired = GET_LOCK('getNextFoldersForReview_lock', 5); -- Timeout of 5 seconds for lock
   IF lock_acquired = 1 THEN
-	  SET @current_date = NOW(6);
-	  UPDATE folders SET lastReviewAt = @current_date WHERE lastDeletionAt IS NULL ORDER BY lastReviewAt LIMIT amount;
-	  SELECT id, fullPath FROM folders WHERE lastReviewAt = @current_date;
-    DO RELEASE_LOCK('getNextFoldersForRevie_lock');
+    SET @current_date = NOW(6);
+		
+    -- MySQL does not allow the ORDER BY clause with an UPDATE statement when using JOIN (Incorrect usage of UPDATE and ORDER BY occurs), so we will split this update on several
+
+    -- mark this objects for processing
+    UPDATE folders SET lastReviewAt = @current_date WHERE lastDeletionAt IS NULL ORDER BY lastReviewAt LIMIT amount;
+
+    -- update lastDeletionAt field from parent
+    UPDATE folders childs LEFT JOIN folders parents ON childs.parentFolderId = parents.id SET childs.lastDeletionAt = parents.lastDeletionAt WHERE childs.lastReviewAt = @current_date;
+
+    -- return not deleted objects
+    SELECT id, fullPath FROM folders WHERE lastReviewAt = @current_date AND lastDeletionAt IS NULL;
+    DO RELEASE_LOCK('getNextFoldersForReview_lock');
   ELSE
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Could not acquire the lock';
   END IF;
 END;
+
 
 CREATE PROCEDURE `reportFolders` (foldersJSON TEXT)
 BEGIN
@@ -54,10 +64,10 @@ BEGIN
       ) 
     ) AS json
     ON DUPLICATE KEY UPDATE
-      folders.parentFolderId=json.parentFolderId,
-      folders.fullPath      =json.fullPath,
-      folders.lastDeletionAt=json.lastDeletionAt,
-      folders.error         =json.error;
+      folders.parentFolderId = json.parentFolderId,
+      folders.fullPath       = json.fullPath,
+      folders.lastDeletionAt = json.lastDeletionAt,
+      folders.error          = json.error;
 END
 
 $$

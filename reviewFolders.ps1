@@ -2,8 +2,8 @@ param(
     $connectionString,
     $inputBatchSize = 100,
     $outputBatchSize = 200,
-    $minimalSendIntervalSec = 60,
-    $initialRoot = 'c:\'
+    $minimalSendIntervalSec = 5,
+    $initialRoot = 'c:\Intel'
 )
 
 if ($connectionString -like '')  {
@@ -38,7 +38,7 @@ do {
     try {
         Write-Host "getNextFoldersForReview" -ForegroundColor Green
         $foldersToCheck = Invoke-SQLQuery -ConnectionName "sql" -query "CALL getNextFoldersForReview(@batchSize);" -parameters @{'batchSize' = $inputBatchSize}
-
+        $foldersToCheck
         foreach($folder in $foldersToCheck){
             #write-host $folder.fullPath
             if (test-path $folder.fullPath) {
@@ -52,7 +52,8 @@ do {
                 }
             } else {
                 # folder does not exist any more (deleted)
-                appendFolder @{'parentFolderId' = $folder.id; 'fullPath' = $folder.fullPath; 'lastDeletionAt' = (get-date); 'error' = 0} $minimalSendIntervalSec $outputBatchSize
+                Write-Host "$($folder.fullPath) does not exist eny more" -ForegroundColor Yellow
+                appendFolder @{'parentFolderId' = $folder.id; 'fullPath' = $folder.fullPath; 'lastDeletionAt' = (get-date).ToString("yyyy-MM-dd HH:mm:ss"); 'error' = 0} $minimalSendIntervalSec $outputBatchSize
             }
         }
     } catch {
