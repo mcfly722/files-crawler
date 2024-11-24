@@ -10,17 +10,53 @@ DROP PROCEDURE IF EXISTS `reportFile`;
 DROP PROCEDURE IF EXISTS `reportHash`;
 
 CREATE TABLE `folders` (
-  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `fullPath` VARCHAR(260) NOT NULL,
-  `exist` TINYINT  DEFAULT 1,
-  `lastReviewAt` TIMESTAMP(6) NULL,
+  `id`             BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  `parentFolderId` BIGINT UNSIGNED  NULL,
+  `fullPath`       VARCHAR(260)     NOT NULL,
+  `lastReviewAt`   TIMESTAMP(6)     NULL,
+  `lastDeletionAt` TIMESTAMP(6)     NULL,
+  `error`  INT     UNSIGNED         NULL,
   PRIMARY KEY (`id`),
-  UNIQUE INDEX (`fullPath`)
+  UNIQUE INDEX (`fullPath`),
+  FOREIGN KEY (`parentFolderId`) REFERENCES folders(id) ON DELETE RESTRICT
 );
 
-CREATE INDEX lastReviewAtIdx ON `folders` (lastReviewAt);
-CREATE INDEX lastReviewAtAndExistIdx ON `folders` (lastReviewAt, exist);
+CREATE INDEX parentFolderIdIdx              ON `folders` (parentFolderId);
+CREATE INDEX lastReviewAtIdx                ON `folders` (lastReviewAt);
+CREATE INDEX lastReviewAtAndLastDeleteAtIdx ON `folders` (lastReviewAt, lastDeletionAt);
 
+DELIMITER $$
+$$
+CREATE DEFINER=`root`@`localhost` PROCEDURE `getNextFoldersForReview`(amount INT UNSIGNED)
+BEGIN
+	SET @current_date = NOW(6);
+	UPDATE folders SET lastReviewAt = @current_date WHERE lastDeletionAt IS NULL ORDER BY lastReviewAt LIMIT amount;
+	SELECT id, fullPath FROM folders WHERE lastReviewAt = @current_date;
+END;
+
+CREATE PROCEDURE `reportFolders` (foldersJSON TEXT)
+BEGIN
+	INSERT INTO folders (parentFolderId, fullPath, lastDeletionAt, error)
+    SELECT parentFolderId, fullPath, lastDeletionAt, error
+    FROM JSON_TABLE(
+		foldersJSON, '$[*]' COLUMNS(
+        parentFolderId BIGINT UNSIGNED PATH '$.parentFolderId',
+        fullPath       VARCHAR(260)    PATH '$.fullPath',
+        lastDeletionAt TIMESTAMP(6)    PATH '$.lastDeletionAt',
+        error          INT UNSIGNED    PATH '$.error'
+      ) 
+    ) AS json
+    ON DUPLICATE KEY UPDATE
+      folders.parentFolderId=json.parentFolderId,
+      folders.fullPath      =json.fullPath,
+      folders.lastDeletionAt=json.lastDeletionAt,
+      folders.error         =json.error;
+END
+
+$$
+DELIMITER ;
+
+/*
 CREATE TABLE `hashes` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `SHA256` VARCHAR(64) NOT NULL,
@@ -41,7 +77,6 @@ CREATE TABLE `files` (
   UNIQUE INDEX (`parentFolderId`,`name`)
 );
 
-
 DELIMITER $$
 $$
 
@@ -58,25 +93,7 @@ BEGIN
 	COMMIT;
 END;
 
-CREATE DEFINER=`root`@`localhost` PROCEDURE `getNextFoldersForReview`(amount INT UNSIGNED)
-BEGIN
-	SET @current_date = NOW(6);
-	UPDATE folders SET lastReviewAt = @current_date WHERE exist=1 ORDER BY lastReviewAt LIMIT amount;
-	SELECT Id, fullPath FROM folders WHERE lastReviewAt = @current_date;
-END;
-
-CREATE PROCEDURE `reportFolders` (foldersJSON TEXT)
-BEGIN
-	INSERT INTO folders (fullPath, exist)
-    SELECT fullPath, exist
-    FROM JSON_TABLE(
-		foldersJSON, '$[*]' COLUMNS(
-			fullPath VARCHAR(260) PATH '$.fullPath',
-            exist TINYINT PATH '$.exist'
-        ) 
-    ) AS json
-    ON DUPLICATE KEY UPDATE folders.fullPath=json.fullPath, folders.exist=json.exist;
-END
 
 $$
 DELIMITER ;
+*/

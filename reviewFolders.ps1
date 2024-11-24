@@ -31,7 +31,7 @@ $WarningPreference = "SilentlyContinue"
 
 Open-MySqlConnection -ConnectionName "sql" -ConnectionString $connectionString
 
-appendFolder @{'fullPath'=$initialRoot;'exist'=1} 0 0
+appendFolder @{'fullPath' = $initialRoot;'lastDeletionAt' = 'NULL'; 'error'= 0} 0 0
 
 
 do {
@@ -44,15 +44,15 @@ do {
             if (test-path $folder.fullPath) {
                 try {
                     Get-ChildItem -Directory $folder.fullPath -ErrorAction Stop | ForEach-Object {
-                        #write-host $_.FullName
-                        appendFolder @{'fullPath' = $_.FullName; 'exist' = 1} $minimalSendIntervalSec $outputBatchSize
+                        write-host $_.FullName
+                        appendFolder @{'parentFolderId' = $folder.id;'fullPath' = $_.FullName; 'lastDeletionAt' = 'NULL'; 'error'= 0 } $minimalSendIntervalSec $outputBatchSize
                     }
                 } catch {
-                    appendFolder @{'fullPath' = $folder.fullPath; 'exist' = 2} $minimalSendIntervalSec $outputBatchSize
+                    appendFolder @{'parentFolderId' = $folder.id; 'fullPath' = $folder.fullPath; 'lastDeletionAt' = 'NULL'; 'error' = 1} $minimalSendIntervalSec $outputBatchSize
                 }
             } else {
                 # folder does not exist any more (deleted)
-                appendFolder @{'fullPath' = $folder.fullPath; 'exist' = 0} $minimalSendIntervalSec $outputBatchSize
+                appendFolder @{'parentFolderId' = $folder.id; 'fullPath' = $folder.fullPath; 'lastDeletionAt' = (get-date); 'error' = 0} $minimalSendIntervalSec $outputBatchSize
             }
         }
     } catch {
